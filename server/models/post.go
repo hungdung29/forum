@@ -495,7 +495,7 @@ func StorePost(db *sql.DB, user_id int, title, content string) (int64, error) {
 
 	result, err := db.Exec(query, user_id, title, content)
 	if err != nil {
-		return 0, fmt.Errorf("%v", err)
+		return 0, fmt.Errorf("failed to store post for user %d: %w", user_id, err)
 	}
 
 	postID, _ := result.LastInsertId()
@@ -508,7 +508,7 @@ func StorePostCategory(db *sql.DB, post_id int64, category_id int) (int64, error
 
 	result, err := db.Exec(query, post_id, category_id)
 	if err != nil {
-		return 0, fmt.Errorf("%v", err)
+		return 0, fmt.Errorf("failed to link post %d with category %d: %w", post_id, category_id, err)
 	}
 
 	postcatID, _ := result.LastInsertId()

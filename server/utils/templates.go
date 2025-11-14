@@ -5,10 +5,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"text/template"
 
 	"forum/server/config"
 	"forum/server/models"
+)
+
+// Template cache - parse once, reuse forever
+var (
+	templateCache = make(map[string]*template.Template)
+	cacheMutex    sync.RWMutex
 )
 
 type GlobalData struct {
@@ -51,10 +58,28 @@ func ParseTemplates(tmpl string) (*template.Template, error) {
 }
 
 func RenderTemplate(db *sql.DB, w http.ResponseWriter, r *http.Request, tmpl string, statusCode int, data any, isauth bool, username string) error {
-	t, err := ParseTemplates(tmpl)
-	if err != nil {
-		return err
+	// Try to get cached template first
+	cacheMutex.RLock()
+	t, exists := templateCache[tmpl]
+	cacheMutex.RUnlock()
+	
+	// If not cached, parse and cache it
+	if !exists {
+		cacheMutex.Lock()
+		// Double-check after acquiring write lock
+		t, exists = templateCache[tmpl]
+		if !exists {
+			var err error
+			t, err = ParseTemplates(tmpl)
+			if err != nil {
+				cacheMutex.Unlock()
+				return err
+			}
+			templateCache[tmpl] = t
+		}
+		cacheMutex.Unlock()
 	}
+	
 	categories, err := models.FetchCategories(db)
 	if err != nil {
 		categories = nil

@@ -3,7 +3,6 @@ package controllers
 import (
 	"database/sql"
 	"encoding/json"
-	"html"
 	"log"
 	"net/http"
 	"strconv"
@@ -171,8 +170,7 @@ func CreatePost(w http.ResponseWriter, r *http.Request, db *sql.DB) {
 
 	catids = strings.Split(catids[0], ",")
 
-	title = html.EscapeString(title)
-	content = html.EscapeString(content)
+	// Sanitization now handled by middleware - no need for manual html.EscapeString
 
 	if catids == nil || strings.TrimSpace(title) == "" || strings.TrimSpace(content) == "" {
 		w.WriteHeader(400)

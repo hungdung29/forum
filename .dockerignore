@@ -1,16 +1,54 @@
-# Ignore the database file if it exists
-server/database/database.db
-
-# Ignore version control system directories
+# Git
 .git
 .gitignore
 
-# Ignore Docker-specific files
+# Database files
+*.db
+*.db-shm
+*.db-wal
+server/database/database.db
+
+# Temporary files
+*.tmp
+*.log
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode
+.idea
+*.iml
+
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+forum
+
+# Test files
+*_test.go
+test/
+coverage.txt
+
+# Documentation
+README.md
+docs/
+
+# Docker
 Dockerfile
+docker-compose.yml
 .dockerignore
 
-# Ignore the commands script as it's not needed inside the container
+# Scripts (not needed in container)
 commands.sh
 
-# Ignore the README as it's not needed in the image
-README.md
+# Environment files
+.env
+.env.local
+
+# OS files
+.DS_Store
+Thumbs.db

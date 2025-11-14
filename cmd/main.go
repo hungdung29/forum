@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"forum/server/config"
+	"forum/server/migrations"
 	"forum/server/routes"
 	"forum/server/utils"
 
@@ -14,10 +19,12 @@ import (
 )
 
 func main() {
-	// Check if running in Docker
-	isDocker := os.Getenv("BASE_PATH") != ""
-	if isDocker {
-		config.BasePath = os.Getenv("BASE_PATH")
+	// Load configuration from environment
+	cfg := config.LoadConfig()
+	
+	// Update BasePath for backward compatibility
+	if cfg.App.BasePath != "" {
+		config.BasePath = cfg.App.BasePath
 	}
 
 	// Connect to the database
@@ -27,12 +34,22 @@ func main() {
 	}
 
 	// Handle database setup based on environment
-	if isDocker {
-		// Create the database schema and demo data
-		err := config.CreateDemoData(db)
-		if err != nil {
-			log.Fatalf("Error creating the database schema and demo data: %v", err)
+	if cfg.App.BasePath != "" {
+		// Running in Docker/production - run migrations automatically
+		log.Println("Running database migrations...")
+		migrationsDir := cfg.App.BasePath + "server/database/migrations"
+		migrator := migrations.NewMigrator(db, migrationsDir)
+		
+		// Initialize migrations table
+		if err := migrator.InitMigrationsTable(); err != nil {
+			log.Fatalf("Failed to initialize migrations table: %v", err)
 		}
+		
+		// Run pending migrations
+		if err := migrator.Up(); err != nil {
+			log.Fatalf("Failed to run migrations: %v", err)
+		}
+		
 		log.Println("Database setup complete.")
 	} else {
 		// Handle command-line flags for database setup
@@ -47,14 +64,37 @@ func main() {
 	}
 	
 
+	
 	// Start the HTTP server
-	server := http.Server{
-		Addr:    ":8080",
-		Handler: routes.Routes(db),
+	server := &http.Server{
+		Addr:         fmt.Sprintf(":%d", cfg.Server.Port),
+		Handler:      routes.Routes(db),
+		ReadTimeout:  cfg.Server.ReadTimeout,
+		WriteTimeout: cfg.Server.WriteTimeout,
+		IdleTimeout:  cfg.Server.IdleTimeout,
 	}
 
-	log.Println("Server starting on http://localhost:8080")
-	if err := server.ListenAndServe(); err != nil {
-		log.Fatal("Server error:", err)
+	// Start server in goroutine so it doesn't block
+	go func() {
+		log.Printf("Server starting on http://localhost:%d (Environment: %s)", 
+			cfg.Server.Port, cfg.App.Environment)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatal("Server error:", err)
+		}
+	}()	// Wait for interrupt signal (Ctrl+C or kill command)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+
+	log.Println("Shutting down server gracefully...")
+
+	// Give existing requests 30 seconds to finish
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Fatal("Server forced to shutdown:", err)
 	}
+
+	log.Println("Server stopped gracefully")
 }
